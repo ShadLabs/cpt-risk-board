@@ -21,6 +21,7 @@
       </div>
     </div>
     <div class="actions">
+      <span class="speed-badge" id="speedBadge" hidden></span>
       <div class="clock"><span data-i18n="clockLabel">Now</span> <b id="clock">--:--:--</b></div>
       <button id="langBtn" class="lang" lang="ar">العربية</button>
       <a id="dockLink" class="btn primary" href="dock.html" target="_blank" rel="noopener" data-i18n="dock">Open dock screen ↗</a>
@@ -87,7 +88,12 @@
       <div><label for="rate" data-i18n="rate">Rate per packer (UPH)</label><input id="rate" type="number" min="0" step="5"></div>
       <div><label for="loadBuf" data-i18n="loadBuf">Load buffer before CPT (min)</label><input id="loadBuf" type="number" min="0" step="5"></div>
       <div><label for="watchMin" data-i18n="watchMin">Watch threshold (min)</label><input id="watchMin" type="number" min="0" step="5"></div>
+      <div><label for="pace" data-i18n="pace">Actual pace (% of planned rate)</label><input id="pace" type="number" min="0" max="200" step="5"></div>
+      <div><label for="speed" data-i18n="speed">Demo speed</label>
+        <select id="speed"><option value="1" data-i18n="speed1">Real time</option><option value="10" data-i18n="speed10">10× (demo)</option><option value="60" data-i18n="speed60">60× (demo)</option></select></div>
     </div>
+    <label class="toggle"><input id="auto" type="checkbox"> <span data-i18n="autoCount">Auto-count packed units</span></label>
+    <p class="hint toggle-hint" data-i18n="autoHint"></p>
     <p class="derived" id="capLine"></p>
   </section>
 

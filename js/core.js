@@ -1,5 +1,5 @@
 // Shared state, time logic and risk calculation for the main board and the dock screen.
-const KEY = 'cpt-risk-board-v2';
+const KEY = 'cpt-risk-board-v3';
 const LANG_KEY = 'cpt-risk-board-lang';
 const DOCK_ALIVE_KEY = 'cpt-risk-board-dock-alive';
 const $ = id => document.getElementById(id);
@@ -57,7 +57,7 @@ function cptDate(time, anchor) {
 // ---- Sample data ----
 // Totals are sized from line capacity so the demo always looks like a live shift:
 // CPTs before now are cleared, the next one is slightly behind, later ones are unstarted.
-const SETUP_DEFAULTS = { packers: 20, rate: 160, loadBuf: 20, watchMin: 15 };
+const SETUP_DEFAULTS = { packers: 20, rate: 160, loadBuf: 20, watchMin: 15, auto: true, pace: 100, speed: 1 };
 function buildSample(key, now, setup) {
   const def = DEFAULT_SHIFTS[key];
   const anchor = shiftAnchor(def.start, now);
@@ -71,7 +71,7 @@ function buildSample(key, now, setup) {
     const interval = Math.max(30, (dl - prevDl) / 60000);
     prevDl = dl;
     const base = round50(capMin * interval * factors[i % 4]);
-    if (c.date <= now) return { id: uid(), time: c.time, total: base, packed: base };
+    if (dl <= now) return { id: uid(), time: c.time, total: base, packed: base };
     if (first) {
       first = false;
       if (now >= anchor) {
@@ -82,7 +82,7 @@ function buildSample(key, now, setup) {
     }
     return { id: uid(), time: c.time, total: base, packed: 0 };
   });
-  return { start: def.start, cpts };
+  return { start: def.start, baseAt: now.getTime(), cpts };
 }
 function defaultState(now) {
   return {
@@ -100,6 +100,54 @@ function loadState() {
   return defaultState(new Date());
 }
 function saveState(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} }
+
+// ---- Live auto-count ----
+// Units per real minute the line packs: packers x rate x actual pace, sped up in demo mode.
+function packRatePerMin(s) {
+  return Math.floor(num(s.packers, 0)) * num(s.rate, 0) * num(s.pace, 0, 200) / 100 / 60 * Math.max(1, num(s.speed, 1));
+}
+// "Packed so far" at any moment, worked out from the last entered (baseline) counts.
+// The line packs the earliest CPT that still has units and whose pack deadline hasn't passed;
+// when a pack deadline passes, its leftover units miss and the line moves to the next CPT.
+// Because it is calculated from time rather than counted up, every open tab shows the same number.
+function effectivePacked(s, key, now) {
+  const sh = s.shifts[key];
+  const anchor = shiftAnchor(sh.start, now);
+  const loadMs = num(s.loadBuf, 0, 600) * 60000;
+  const base = num(sh.baseAt, 0);
+  const stale = base < anchor.getTime() - 12 * 3600000; // baseline belongs to an earlier day
+  const rows = sh.cpts.map(c => {
+    const total = Math.floor(num(c.total, 0));
+    const date = cptDate(c.time, anchor);
+    return { id: c.id, total, date, deadline: date ? date.getTime() - loadMs : 0, packed: stale ? 0 : Math.min(total, num(c.packed, 0)) };
+  }).filter(r => r.date).sort((a, b) => a.date - b.date);
+  const out = {};
+  const rate = packRatePerMin(s);
+  if (s.auto !== false && rate > 0) {
+    let cursor = Math.max(stale ? 0 : base, anchor.getTime());
+    const end = now.getTime();
+    while (cursor < end) {
+      const target = rows.find(r => r.packed < r.total && r.deadline > cursor);
+      if (!target) break;
+      const stop = Math.min(end, target.deadline);
+      const capacity = rate * (stop - cursor) / 60000;
+      const need = target.total - target.packed;
+      if (need <= capacity) { target.packed = target.total; cursor += need / rate * 60000; }
+      else { target.packed += capacity; cursor = stop; }
+    }
+  }
+  rows.forEach(r => { out[r.id] = r.packed; });
+  return out;
+}
+// Freeze the live counts as the new baseline. Called before any setting or count changes,
+// so the time already worked is kept and only the future uses the new numbers.
+function rebase(s, now) {
+  for (const key of ['day', 'night']) {
+    const eff = effectivePacked(s, key, now);
+    s.shifts[key].cpts.forEach(c => { if (c.id in eff) c.packed = Math.round(eff[c.id] * 100) / 100; });
+    s.shifts[key].baseAt = now.getTime();
+  }
+}
 
 // ---- Language ----
 function initialLang() {
@@ -125,12 +173,15 @@ function calc(s, now) {
   const rate = num(s.rate, 0);
   const loadBuf = num(s.loadBuf, 0, 600);
   const watchMin = num(s.watchMin, 0, 600);
-  const capPerMin = packers * rate / 60;
+  const capPerMin = packRatePerMin(s); // live rate: packers x rate x pace (x demo speed)
+  const effRate = capPerMin / Math.max(1, packers) * 60; // units per packer-hour actually achieved
   const anchor = shiftAnchor(sh.start, now);
+  const eff = effectivePacked(s, s.shift, now);
 
   const rows = sh.cpts.map(c => {
     const total = Math.floor(num(c.total, 0));
-    const packed = Math.min(total, Math.floor(num(c.packed, 0)));
+    const live = c.id in eff ? eff[c.id] : num(c.packed, 0);
+    const packed = live >= total ? total : Math.min(total, Math.floor(live));
     return { id: c.id, date: cptDate(c.time, anchor), total, packed, remaining: total - packed };
   }).filter(r => r.date).sort((a, b) => a.date - b.date);
   rows.forEach((r, i) => { r.n = i + 1; r.label = t('cptLabel')(r.n, hhmm(r.date)); });
@@ -139,7 +190,8 @@ function calc(s, now) {
   for (const r of rows) {
     r.msLeft = r.date - now;
     r.cleared = r.total > 0 && r.remaining === 0;
-    if (r.msLeft <= 0) { r.past = true; r.status = r.cleared || r.total === 0 ? (r.total === 0 ? 'ready' : 'cleared') : 'missed'; continue; }
+    // Once the CPT time is up the result is final: cleared or missed.
+    if (r.msLeft <= 0) { r.past = true; r.status = r.total === 0 ? 'ready' : (r.cleared ? 'cleared' : 'missed'); continue; }
     cum += r.remaining;
     r.deadline = new Date(r.date.getTime() - loadBuf * 60000);
     r.minsToDeadline = (r.deadline - now) / 60000;
@@ -148,14 +200,18 @@ function calc(s, now) {
     r.buffer = r.minsToDeadline - r.finishMins;
     const packable = capPerMin * Math.max(0, r.minsToDeadline);
     r.atRisk = Math.min(r.remaining, Math.max(0, Math.ceil(cum - packable)));
-    r.reqPackers = r.minsToDeadline > 0 && rate > 0 ? Math.ceil(cum / (r.minsToDeadline * rate / 60) - 1e-9) : Infinity;
+    r.reqPackers = r.minsToDeadline > 0 && effRate > 0 ? Math.ceil(cum / (r.minsToDeadline * effRate / 60) - 1e-9) : Infinity;
     if (r.total === 0) r.status = 'ready';
-    else if (r.cleared) r.status = 'cleared';
+    else if (r.cleared) r.status = 'packed'; // all packed, waiting for the truck to leave
     else if (r.buffer < 0) r.status = 'risk';
     else if (r.buffer < watchMin) r.status = 'watch';
     else r.status = 'safe';
   }
 
+  // The CPT the line is packing right now (live auto-count only).
+  const packingNow = s.auto !== false && capPerMin > 0 && now >= anchor
+    ? rows.find(r => !r.past && r.remaining > 0 && r.minsToDeadline > 0) : null;
+  if (packingNow) packingNow.packingNow = true;
   const future = rows.filter(r => !r.past);
   const active = future.filter(r => r.remaining > 0);
   const risk = active.filter(r => r.status === 'risk');
@@ -170,13 +226,13 @@ function calc(s, now) {
   const finiteReq = active.map(r => r.reqPackers).filter(isFinite);
   const needed = finiteReq.length ? Math.max(...finiteReq) : packers;
   const unsavable = active.some(r => !isFinite(r.reqPackers));
-  return { now, packers, rate, loadBuf, watchMin, capPerMin, rows, future, active, risk, watch, missed,
+  return { now, packers, rate, effRate, packingNow, loadBuf, watchMin, capPerMin, rows, future, active, risk, watch, missed,
     withVol, clearedN, totalUnits, packedUnits, unitsLeft, unitsAtRisk, needed, unsavable };
 }
 
 const STATUS = {
   safe: ['ok', 'stSafe'], watch: ['warn', 'stWatch'], risk: ['bad', 'stRisk'],
-  missed: ['bad', 'stMissed'], cleared: ['done', 'stCleared'], ready: ['muted', 'stReady']
+  missed: ['bad', 'stMissed'], packed: ['done', 'stPacked'], cleared: ['done', 'stCleared'], ready: ['muted', 'stReady']
 };
 const badge = s => `<span class="badge ${STATUS[s][0]}">${t(STATUS[s][1])}</span>`;
 const showsBuffer = r => !r.past && (r.status === 'safe' || r.status === 'watch' || r.status === 'risk') && isFinite(r.buffer);

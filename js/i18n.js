@@ -50,7 +50,7 @@ const I18N = {
 
     // board
     s1: 'Live board',
-    s1hint: 'CPTs are worked earliest first, so each one waits for the volume of earlier CPTs. Update "Packed so far" as volume moves to keep the board accurate.',
+    s1hint: 'CPTs are worked earliest first, so each one waits for the volume of earlier CPTs. Packed units count up live while the line is working.',
     thCpt: 'CPT',
     thLeft: 'Time left',
     thTotal: 'Total units',
@@ -65,8 +65,9 @@ const I18N = {
     stSafe: 'Safe',
     stWatch: 'Watch',
     stRisk: 'Miss risk',
-    stMissed: 'Missed',
-    stCleared: 'Cleared',
+    stMissed: 'CPT missed',
+    stCleared: 'CPT cleared',
+    stPacked: 'All packed',
     stReady: 'No volume',
 
     // setup
@@ -78,7 +79,16 @@ const I18N = {
     rate: 'Rate per packer (UPH)',
     loadBuf: 'Load buffer before CPT (min)',
     watchMin: 'Watch threshold (min)',
-    capLine: (hr, mn) => `Line capacity: <b>${hr}</b> units per hour (${mn} per minute)`,
+    autoCount: 'Auto-count packed units',
+    autoHint: 'When on, "Packed so far" grows every second at packers × rate × pace, earliest CPT first. Type the real count from your system at any time to correct it.',
+    pace: 'Actual pace (% of planned rate)',
+    speed: 'Demo speed',
+    speed1: 'Real time',
+    speed10: '10× (demo)',
+    speed60: '60× (demo)',
+    speedBadge: n => `Demo speed ${n}×`,
+    packingNow: 'Packing now',
+    capLine: (hr, mn, pace) => `Line output at ${L(pace + '%')} pace: <b>${hr}</b> units per hour (${mn} per minute)`,
 
     // schedule
     s3: 'CPT schedule',
@@ -92,13 +102,15 @@ const I18N = {
 
     howTitle: 'How the risk is calculated',
     howList: `
+      <li><b>Packed so far</b> counts up live at packers × rate per packer × actual pace. The line packs the earliest CPT first. When a CPT's pack deadline passes, its leftover units miss and the line moves on. Typing a real count resets the count from that number.</li>
       <li><b>Remaining units</b> = total units to clear − packed so far</li>
-      <li><b>Line capacity</b> = packers × rate per packer. All CPTs share it.</li>
+      <li><b>Line output</b> = packers × rate per packer × actual pace. All CPTs share it.</li>
       <li>CPTs are worked <b>earliest first</b>, so the line must finish all earlier CPTs' remaining units before a later one is done.</li>
       <li><b>Pack deadline</b> = CPT time − load buffer</li>
       <li><b>Projected finish</b> = now + (remaining units for this CPT and all earlier CPTs ÷ line capacity)</li>
       <li><b>Buffer</b> = pack deadline − projected finish. Negative means the CPT will miss at the current rate.</li>
-      <li><b>Status</b>: Cleared when every unit is packed, Miss risk if buffer is below 0, Watch if it is below the watch threshold, otherwise Safe.</li>
+      <li><b>Status</b> before the CPT time: All packed when every unit is packed, Miss risk if buffer is below 0, Watch if it is below the watch threshold, otherwise Safe.</li>
+      <li><b>Result</b> once the CPT time is up: <b>CPT cleared</b> if every unit was packed, otherwise <b>CPT missed</b> with the units left behind.</li>
       <li><b>Packers needed</b> = the most packers any upcoming CPT needs to finish its own and all earlier remaining volume before its pack deadline.</li>`,
     builtBy: 'Built by',
     footerNote: 'All figures are illustrative sample data, not from any real site.',
@@ -106,6 +118,11 @@ const I18N = {
     // dock
     dockSummary: (c, n, risk, watch) => `<b>${c}/${n}</b> cleared · <b>${risk}</b> at risk · <b>${watch}</b> on watch`,
     dockLeft: 'Left',
+    unitsRemaining: 'units remaining',
+    toCpt: time => `${L(time)} to CPT`,
+    loadingNow: time => `Ready to load · ${L(time)} to CPT`,
+    shipped: n => `${n} units shipped on time`,
+    leftBehind: (n, total) => `${n} of ${total} units left behind`,
     dockBuffer: 'Buffer',
     dockOf: (p, t) => `${p} / ${t} packed`,
     soundOn: '🔊 Sound on',
@@ -171,7 +188,7 @@ const I18N = {
     actWatch: (label, m) => `راقب <b>${label}</b>: الهامش ${L(m)} دقيقة فقط. أعد التحقق من الوحدات بعد 15 دقيقة.`,
 
     s1: 'اللوحة المباشرة',
-    s1hint: 'يتم العمل على المواعيد الأقرب أولًا، لذلك ينتظر كل موعد إنجاز وحدات المواعيد التي قبله. حدّث "تم تغليفه" مع تقدم العمل لتبقى اللوحة دقيقة.',
+    s1hint: 'يتم العمل على المواعيد الأقرب أولًا، لذلك ينتظر كل موعد إنجاز وحدات المواعيد التي قبله. تزداد الوحدات المغلّفة مباشرة أثناء عمل الخط.',
     thCpt: 'الموعد',
     thLeft: 'الوقت المتبقي',
     thTotal: 'إجمالي الوحدات',
@@ -186,8 +203,9 @@ const I18N = {
     stSafe: 'آمن',
     stWatch: 'مراقبة',
     stRisk: 'خطر التفويت',
-    stMissed: 'فات',
-    stCleared: 'تم الإنجاز',
+    stMissed: 'فات الموعد',
+    stCleared: 'تم إنجاز الموعد',
+    stPacked: 'تم التغليف بالكامل',
     stReady: 'لا يوجد حجم',
 
     s2: 'إعداد المنشأة والخط',
@@ -198,7 +216,16 @@ const I18N = {
     rate: 'معدل المغلّف (UPH)',
     loadBuf: 'هامش التحميل قبل الموعد (دقيقة)',
     watchMin: 'حد المراقبة (دقيقة)',
-    capLine: (hr, mn) => `طاقة الخط: <b>${hr}</b> وحدة في الساعة (${mn} في الدقيقة)`,
+    autoCount: 'العدّ التلقائي للوحدات المغلّفة',
+    autoHint: 'عند التفعيل، يزداد "تم تغليفه" كل ثانية بمعدل عدد المغلّفين × المعدل × نسبة الأداء، بدءًا بالموعد الأقرب. يمكنك إدخال العدد الفعلي من النظام في أي وقت لتصحيحه.',
+    pace: 'الأداء الفعلي (% من المعدل المخطط)',
+    speed: 'سرعة العرض التجريبي',
+    speed1: 'الوقت الفعلي',
+    speed10: '10× (تجريبي)',
+    speed60: '60× (تجريبي)',
+    speedBadge: n => `سرعة تجريبية ${n}×`,
+    packingNow: 'يتم تغليفه الآن',
+    capLine: (hr, mn, pace) => `إنتاج الخط بأداء ${L(pace + '%')}: <b>${hr}</b> وحدة في الساعة (${mn} في الدقيقة)`,
 
     s3: 'جدول المواعيد',
     s3hint: (shift) => `مواعيد ${shift}. تبدأ كل وردية بأربعة مواعيد، ويمكنك الإضافة أو الحذف حسب الحاجة. المواعيد التي تسبق وقت بدء الوردية تُحسب لصباح اليوم التالي.`,
@@ -211,19 +238,26 @@ const I18N = {
 
     howTitle: 'طريقة حساب المخاطر',
     howList: `
+      <li><b>تم تغليفه</b> يزداد مباشرة بمعدل عدد المغلّفين × معدل المغلّف × نسبة الأداء الفعلي. يغلّف الخط الموعد الأقرب أولًا، وعند انتهاء موعد إنهاء التغليف تفوت الوحدات المتبقية وينتقل الخط إلى الموعد التالي. إدخال عدد فعلي يعيد العدّ من ذلك الرقم.</li>
       <li><b>الوحدات المتبقية</b> = إجمالي الوحدات المطلوب إنجازها − ما تم تغليفه</li>
-      <li><b>طاقة الخط</b> = عدد المغلّفين × معدل المغلّف. وهي مشتركة بين جميع المواعيد.</li>
+      <li><b>إنتاج الخط</b> = عدد المغلّفين × معدل المغلّف × نسبة الأداء الفعلي. وهو مشترك بين جميع المواعيد.</li>
       <li>يتم العمل على <b>المواعيد الأقرب أولًا</b>، لذا يجب إنهاء الوحدات المتبقية للمواعيد السابقة قبل إنجاز الموعد اللاحق.</li>
       <li><b>موعد إنهاء التغليف</b> = وقت الموعد − هامش التحميل</li>
       <li><b>الإنجاز المتوقع</b> = الآن + (الوحدات المتبقية لهذا الموعد وجميع المواعيد السابقة ÷ طاقة الخط)</li>
       <li><b>الهامش</b> = موعد إنهاء التغليف − الإنجاز المتوقع. القيمة السالبة تعني أن الموعد سيفوت بالمعدل الحالي.</li>
-      <li><b>الحالة</b>: تم الإنجاز عند تغليف جميع الوحدات، وخطر التفويت إذا كان الهامش أقل من صفر، ومراقبة إذا كان أقل من حد المراقبة، وإلا فهو آمن.</li>
+      <li><b>الحالة</b> قبل وقت الموعد: تم التغليف بالكامل عند تغليف جميع الوحدات، وخطر التفويت إذا كان الهامش أقل من صفر، ومراقبة إذا كان أقل من حد المراقبة، وإلا فهو آمن.</li>
+      <li><b>النتيجة</b> عند حلول وقت الموعد: <b>تم إنجاز الموعد</b> إذا تم تغليف جميع الوحدات، وإلا <b>فات الموعد</b> مع عدد الوحدات المتبقية.</li>
       <li><b>المغلّفون المطلوبون</b> = أكبر عدد من المغلّفين يحتاجه أي موعد قادم لإنهاء وحداته المتبقية ووحدات ما قبله قبل موعد إنهاء التغليف.</li>`,
     builtBy: 'إعداد',
     footerNote: 'جميع الأرقام بيانات تجريبية للتوضيح وليست من أي موقع حقيقي.',
 
     dockSummary: (c, n, risk, watch) => `تم إنجاز <b>${L(c + '/' + n)}</b> · <b>${risk}</b> في خطر · <b>${watch}</b> تحت المراقبة`,
     dockLeft: 'المتبقي',
+    unitsRemaining: 'وحدة متبقية',
+    toCpt: time => `${L(time)} حتى الموعد`,
+    loadingNow: time => `جاهز للتحميل · ${L(time)} حتى الموعد`,
+    shipped: n => `تم شحن ${n} وحدة في الموعد`,
+    leftBehind: (n, total) => `بقيت ${n} من ${total} وحدة دون شحن`,
     dockBuffer: 'الهامش',
     dockOf: (p, t) => `تم تغليف ${p} من ${t}`,
     soundOn: '🔊 الصوت مفعّل',

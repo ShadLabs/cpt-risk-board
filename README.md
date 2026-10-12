@@ -4,7 +4,7 @@ A live board for one outbound warehouse that shows whether each **CPT (critical 
 
 **Live demo:** https://shadlabs.github.io/cpt-risk-board/
 **Dock screen:** https://shadlabs.github.io/cpt-risk-board/dock.html
-**Arabic version:** https://shadlabs.github.io/cpt-risk-board/
+**Arabic version:** https://shadlabs.github.io/cpt-risk-board/?lang=ar
 
 ![Screenshot](docs/screenshot.png)
 
@@ -17,12 +17,13 @@ I worked for almost two years as a Pack and Outbound Process Assistant. I built 
 ## What it does
 
 - Tracks **one facility** with a **Day shift** and a **Night shift**, each starting with **4 CPT times** that you can add to or remove
-- For each CPT, you enter the **total units to clear** and **units packed so far**. The board shows remaining units and a progress bar.
+- For each CPT, you enter the **total units to clear**. **Packed so far counts up live** at packers × rate × actual pace, earliest CPT first, and a **Packing now** tag shows which CPT the line is working on. Type the real count from your system at any time to correct it.
+- An **actual pace %** setting shows how risk builds when the line runs below plan, and a **demo speed** (10× or 60×) lets you watch a whole shift play out in minutes
 - Opens with a **Shift at a glance** overview: a plain-language verdict, shift progress, a countdown to the next CPT, CPTs at risk, units at risk and packers needed
 - Lists **top actions**, such as how many packers to add and by when, or when to escalate to transportation
 - Shows a **live board** with a countdown, projected finish time and minutes of buffer for every CPT, updated every second
 - Treats packing as a **shared line worked earliest-CPT-first**, so a large early CPT correctly pushes risk onto later ones, and accounts for **truck loading time**
-- Includes a **dock screen** that opens in its own tab for a wall TV and updates live as the main board changes
+- Includes a **dock screen** that opens in its own tab for a wall TV. Each CPT tile leads with **units remaining** and a countdown, then switches to a final **CPT cleared** or **CPT missed** result once the CPT time is up.
 - **Celebrates every cleared CPT** with confetti, a congratulations message and a fanfare, plus a bigger celebration when the last CPT of the shift is cleared
 - Works in **English and Arabic** with a full right-to-left layout, exports to **CSV**, and saves inputs in the browser
 
@@ -32,12 +33,14 @@ I worked for almost two years as a Pack and Outbound Process Assistant. I built 
 
 | Step | Formula |
 |---|---|
+| Packed so far (live) | last entered count + packers × rate × pace × time worked, earliest CPT first; packing for a CPT stops at its pack deadline |
 | Remaining units | total units to clear − packed so far |
-| Line capacity | packers × rate per packer (UPH) |
+| Line output | packers × rate per packer (UPH) × actual pace |
 | Pack deadline | CPT time − load buffer |
 | Projected finish | now + (remaining units for this CPT and all earlier CPTs ÷ line capacity) |
 | Buffer | pack deadline − projected finish |
-| Status | Cleared when every unit is packed · Miss risk if buffer < 0 · Watch if buffer < watch threshold · otherwise Safe |
+| Status (before CPT time) | All packed when every unit is packed · Miss risk if buffer < 0 · Watch if buffer < watch threshold · otherwise Safe |
+| Result (once CPT time is up) | **CPT cleared** if every unit was packed, otherwise **CPT missed** with the units left behind |
 | Units at risk | units that cannot be packed before the pack deadline at the current rate |
 | Packers needed | the most packers any upcoming CPT needs to finish its own and all earlier volume before its pack deadline |
 
@@ -73,6 +76,8 @@ cpt-risk-board/
 
 The sample data is sized from the current time, so the demo always looks like a live shift. Click **Reset to sample** to refresh it.
 
+**Demo tip:** set **Demo speed** to 60× and open the dock screen. Packed units climb about 53 per second and CPT 1 clears, with its celebration, in about two minutes. Lower **Actual pace** to 85% to show a CPT turning red, then add packers to bring it back.
+
 ## Data note
 
 All volumes, rates, and times are **illustrative sample data**. They are not taken from any real site or employer system.
@@ -88,4 +93,4 @@ All volumes, rates, and times are **illustrative sample data**. They are not tak
 - Sound alert when a CPT turns red
 
 ---
-Built by **Shadrack Kpani Odametey** · [LinkedIn](https://www.linkedin.com/in/Shadrack-Odametey)
+Built by **Your Name** · [LinkedIn](https://www.linkedin.com/in/your-profile)

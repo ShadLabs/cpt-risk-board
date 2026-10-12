@@ -19,8 +19,8 @@ function remainCell(x) {
 function renderBoard(r) {
   $('boardRows').innerHTML = r.rows.map(x => `
     <tr class="${x.past ? 'past' : ''} ${x.status === 'cleared' ? 'is-cleared' : ''}">
-      <td class="route">${x.label}</td>
-      <td class="n">${x.status === 'cleared' && !x.past ? '–' : countdown(x.msLeft)}</td>
+      <td class="route">${x.label}${x.packingNow ? `<span class="now-tag">${t('packingNow')}</span>` : ''}</td>
+      <td class="n">${x.past ? '–' : countdown(x.msLeft)}</td>
       <td class="n">${fmt(x.total)}</td>
       <td class="n">${fmt(x.packed)}</td>
       <td>${remainCell(x)}</td>
@@ -72,67 +72,77 @@ function renderHeader() {
     b.classList.toggle('active', on); b.setAttribute('aria-selected', on);
   });
   $('schedHint').textContent = t('s3hint')(shiftName(state).toLowerCase());
-  const cap = Math.floor(num(state.packers, 0)) * num(state.rate, 0);
-  $('capLine').innerHTML = t('capLine')(fmt(cap), fmt(cap / 60, 1));
+  const pace = num(state.pace, 0, 200);
+  const cap = Math.floor(num(state.packers, 0)) * num(state.rate, 0) * pace / 100;
+  $('capLine').innerHTML = t('capLine')(fmt(Math.round(cap)), fmt(cap / 60, 1), fmt(pace));
+  const sp = Math.max(1, num(state.speed, 1));
+  $('speedBadge').hidden = sp <= 1;
+  $('speedBadge').textContent = t('speedBadge')(sp);
 }
 
+// Runs every second: redraw with live counts, and celebrate any CPT that has just been cleared.
+// (If a dock screen is open, it plays the sound so it isn't heard twice.)
 function tick() {
-  const r = calc(state, new Date());
+  const { fresh, r } = watcher(state, new Date());
   $('clock').textContent = hhmm(r.now) + ':' + pad(r.now.getSeconds());
   renderBoard(r); renderOverview(r);
-}
-
-// Save, redraw, and celebrate any CPT that has just been cleared.
-function update() {
-  saveState(state);
-  renderHeader();
-  const { fresh, r } = watcher(state, new Date());
-  tick();
+  // Keep the "Packed so far" boxes counting up, except the one being typed in.
+  const byId = Object.fromEntries(r.rows.map(x => [x.id, x.packed]));
+  document.querySelectorAll('#schedRows input[data-k=packed]').forEach(el => {
+    const c = shiftData().cpts[+el.dataset.i];
+    if (c && el !== document.activeElement && c.id in byId && String(byId[c.id]) !== el.value) el.value = byId[c.id];
+  });
   fresh.forEach((row, i) => {
-    const isLast = r.withVol.length > 0 && r.clearedN === r.withVol.length;
-    setTimeout(() => Celebrate.cleared(row, isLast && i === fresh.length - 1, !dockIsOpen()), i * 1500);
+    const isLast = r.withVol.length > 0 && r.clearedN === r.withVol.length && i === fresh.length - 1;
+    setTimeout(() => Celebrate.cleared(row, isLast, !dockIsOpen()), i * 1500);
   });
 }
 
+function update() { saveState(state); renderHeader(); tick(); }
+// Before changing anything that affects counting, lock in what has been packed up to now.
+const change = fn => { rebase(state, new Date()); fn(); update(); };
+
 // ---- Inputs ----
-const SETUP = ['facility', 'packers', 'rate', 'loadBuf', 'watchMin'];
+const SETUP = ['facility', 'packers', 'rate', 'loadBuf', 'watchMin', 'pace', 'speed'];
 function fillSetup() {
   SETUP.forEach(f => { $(f).value = state[f]; });
+  $('auto').checked = state.auto !== false;
   $('shiftStart').value = shiftData().start;
 }
-SETUP.forEach(f => $(f).addEventListener('input', e => { state[f] = e.target.value; update(); }));
-$('shiftStart').addEventListener('input', e => { shiftData().start = e.target.value; update(); });
+SETUP.forEach(f => $(f).addEventListener('input', e => change(() => { state[f] = e.target.value; })));
+$('auto').addEventListener('change', e => change(() => { state.auto = e.target.checked; }));
+$('shiftStart').addEventListener('input', e => change(() => { shiftData().start = e.target.value; }));
 
 function renderSchedule() {
   $('schedRows').innerHTML = shiftData().cpts.map((c, i) => `
     <tr>
       <td><input type="time" data-i="${i}" data-k="time" value="${esc(c.time)}" aria-label="${esc(t('thTime'))}"></td>
       <td><input type="number" min="0" step="100" data-i="${i}" data-k="total" value="${esc(c.total)}" aria-label="${esc(t('thTotalEdit'))}"></td>
-      <td><input type="number" min="0" step="100" data-i="${i}" data-k="packed" value="${esc(c.packed)}" aria-label="${esc(t('thPackedEdit'))}"></td>
+      <td><input type="number" min="0" step="100" data-i="${i}" data-k="packed" value="${esc(Math.floor(num(c.packed, 0)))}" aria-label="${esc(t('thPackedEdit'))}"></td>
       <td><button class="small" data-clear="${i}">${t('markCleared')}</button></td>
       <td><button class="icon-btn" data-remove="${i}" aria-label="${esc(t('removeCpt'))}">✕</button></td>
     </tr>`).join('');
 }
 $('schedRows').addEventListener('input', e => {
   const el = e.target;
-  if (el.dataset.k) { shiftData().cpts[+el.dataset.i][el.dataset.k] = el.value; Celebrate.unlockAudio(); update(); }
+  if (el.dataset.k) { Celebrate.unlockAudio(); change(() => { shiftData().cpts[+el.dataset.i][el.dataset.k] = el.value; }); }
 });
 $('schedRows').addEventListener('click', e => {
   const rm = e.target.closest('[data-remove]');
   const cl = e.target.closest('[data-clear]');
-  if (rm) { shiftData().cpts.splice(+rm.dataset.remove, 1); renderSchedule(); update(); }
+  if (rm) { change(() => { shiftData().cpts.splice(+rm.dataset.remove, 1); }); renderSchedule(); }
   if (cl) {
     Celebrate.unlockAudio();
-    const c = shiftData().cpts[+cl.dataset.clear];
-    c.packed = c.total; renderSchedule(); update();
+    change(() => { const c = shiftData().cpts[+cl.dataset.clear]; c.packed = c.total; });
+    renderSchedule();
   }
 });
 $('addCpt').addEventListener('click', () => {
   const list = shiftData().cpts;
   const last = list.length ? parseTime(list[list.length - 1].time) : parseTime(shiftData().start);
   const d = new Date(); d.setHours((last ? last.h : 0) + 2, last ? last.m : 0, 0, 0);
-  list.push({ id: uid(), time: hhmm(d), total: 0, packed: 0 });
-  renderSchedule(); update();
+  change(() => list.push({ id: uid(), time: hhmm(d), total: 0, packed: 0 }));
+  renderSchedule();
 });
 
 // ---- Buttons ----
@@ -140,6 +150,7 @@ document.querySelectorAll('.shift-tabs [data-shift]').forEach(b => b.addEventLis
   state.shift = b.dataset.shift; fillSetup(); renderSchedule(); update();
 }));
 $('resetBtn').addEventListener('click', () => {
+  rebase(state, new Date());
   state.shifts[state.shift] = buildSample(state.shift, new Date(), state);
   fillSetup(); renderSchedule(); update();
 });
