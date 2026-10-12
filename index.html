@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CPT Risk Board</title>
-<meta name="description" content="Live outbound departure tracker in English and Arabic: shows which CPTs (critical pull times) will be met at the current pack rate, how many units are at risk, and how many packers are needed.">
+<meta name="description" content="Live outbound CPT tracker for one warehouse, in English and Arabic: day and night shifts, units to clear per CPT, risk at the current pack rate, packers needed, and a dock screen that celebrates every cleared CPT.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -17,17 +17,22 @@
       <div class="stripe" aria-hidden="true"></div>
       <div>
         <h1 data-i18n="title">CPT Risk Board</h1>
-        <p class="sub"><span data-i18n="subtitle">Live outbound departure tracker · sample data only</span></p>
+        <p class="sub"><b id="facilityName"></b> · <span data-i18n="subtitle">Live outbound CPT tracker</span></p>
       </div>
     </div>
     <div class="actions">
-      <div class="clock" aria-live="off"><span data-i18n="clockLabel">Now</span> <b id="clock">--:--:--</b></div>
+      <div class="clock"><span data-i18n="clockLabel">Now</span> <b id="clock">--:--:--</b></div>
       <button id="langBtn" class="lang" lang="ar">العربية</button>
-      <button id="dockBtn" class="primary" data-i18n="dock">Dock screen</button>
+      <a id="dockLink" class="btn primary" href="dock.html" target="_blank" rel="noopener" data-i18n="dock">Open dock screen ↗</a>
       <button id="exportCsv" data-i18n="exportCsv">Export CSV</button>
       <button id="resetBtn" data-i18n="reset">Reset to sample</button>
     </div>
   </header>
+
+  <div class="shift-tabs" role="tablist">
+    <button role="tab" data-shift="day" data-i18n="shiftDay">Day shift</button>
+    <button role="tab" data-shift="night" data-i18n="shiftNight">Night shift</button>
+  </div>
 
   <section class="overview">
     <div class="ov-head">
@@ -35,20 +40,22 @@
       <a href="#board" class="see-plan" data-i18n="seeBoard">See full board ↓</a>
     </div>
     <div class="verdict" id="verdict"></div>
+    <div class="progress-line" id="progressLine"></div>
     <div class="cards" id="cards"></div>
     <div class="actions-box" id="topActions"></div>
   </section>
 
   <section id="board">
     <h2><span class="num">01</span><span data-i18n="s1">Live board</span></h2>
-    <p class="hint" data-i18n="s1hint">CPTs are worked earliest first.</p>
+    <p class="hint" data-i18n="s1hint"></p>
     <div class="table-scroll">
       <table>
         <thead><tr>
-          <th data-i18n="thRoute">Route / carrier</th>
-          <th class="n" data-i18n="thCpt">CPT</th>
+          <th data-i18n="thCpt">CPT</th>
           <th class="n" data-i18n="thLeft">Time left</th>
-          <th class="n" data-i18n="thUnits">Units left</th>
+          <th class="n" data-i18n="thTotal">Total units</th>
+          <th class="n" data-i18n="thPacked">Packed</th>
+          <th data-i18n="thRemain">Remaining</th>
           <th class="n" data-i18n="thFinish">Projected finish</th>
           <th class="n" data-i18n="thBuffer">Buffer</th>
           <th data-i18n="thStatus">Status</th>
@@ -59,9 +66,23 @@
   </section>
 
   <section>
-    <h2><span class="num">02</span><span data-i18n="s2">Line setup</span></h2>
-    <p class="hint" data-i18n="s2hint">Packing capacity shared across all CPTs.</p>
+    <h2><span class="num">02</span><span data-i18n="s3">CPT schedule</span></h2>
+    <p class="hint" id="schedHint"></p>
+    <div class="table-scroll">
+      <table class="edit">
+        <thead><tr><th data-i18n="thTime">CPT time</th><th data-i18n="thTotalEdit">Total units to clear</th><th data-i18n="thPackedEdit">Packed so far</th><th></th><th></th></tr></thead>
+        <tbody id="schedRows"></tbody>
+      </table>
+    </div>
+    <button id="addCpt" class="add" data-i18n="addCpt">+ Add CPT time</button>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span><span data-i18n="s2">Facility & line setup</span></h2>
+    <p class="hint" data-i18n="s2hint"></p>
     <div class="grid">
+      <div class="wide"><label for="facility" data-i18n="facility">Facility / warehouse</label><input id="facility" type="text" dir="auto"></div>
+      <div><label for="shiftStart" data-i18n="shiftStart">Shift start time</label><input id="shiftStart" type="time"></div>
       <div><label for="packers" data-i18n="packers">Packers on line</label><input id="packers" type="number" min="0" step="1"></div>
       <div><label for="rate" data-i18n="rate">Rate per packer (UPH)</label><input id="rate" type="number" min="0" step="5"></div>
       <div><label for="loadBuf" data-i18n="loadBuf">Load buffer before CPT (min)</label><input id="loadBuf" type="number" min="0" step="5"></div>
@@ -71,38 +92,18 @@
   </section>
 
   <section>
-    <h2><span class="num">03</span><span data-i18n="s3">CPT schedule</span></h2>
-    <p class="hint" data-i18n="s3hint">Enter each departure and the units still to pack for it.</p>
-    <div class="table-scroll">
-      <table class="edit">
-        <thead><tr><th data-i18n="thRoute">Route / carrier</th><th data-i18n="thCpt">CPT</th><th data-i18n="thUnitsEdit">Units left to pack</th><th></th></tr></thead>
-        <tbody id="schedRows"></tbody>
-      </table>
-    </div>
-    <button id="addCpt" class="add" data-i18n="addCpt">+ Add departure</button>
-  </section>
-
-  <section>
     <details>
       <summary data-i18n="howTitle">How the risk is calculated</summary>
       <ol data-i18n-html="howList"></ol>
     </details>
   </section>
 
-  <footer><span data-i18n="builtBy">Built by</span> <b class="author">Shadrack Kpani Odametey</b> · <span data-i18n="footerNote">All figures are illustrative sample data, not from any real site.</span></footer>
-</div>
-
-<div id="dock" class="dock" hidden>
-  <div class="dock-head">
-    <div class="dock-title"><span class="stripe" aria-hidden="true"></span><span data-i18n="title">CPT Risk Board</span></div>
-    <div class="dock-summary" id="dockSummary"></div>
-    <div class="dock-clock" id="dockClock">--:--</div>
-    <button id="exitDock" data-i18n="exitDock">Exit dock screen</button>
-  </div>
-  <div class="tiles" id="tiles"></div>
+  <footer><span data-i18n="builtBy">Built by</span> <b class="author">Your Name</b> · <span data-i18n="footerNote">All figures are illustrative sample data, not from any real site.</span></footer>
 </div>
 
 <script src="js/i18n.js" defer></script>
+<script src="js/core.js" defer></script>
+<script src="js/celebrate.js" defer></script>
 <script src="js/app.js" defer></script>
 </body>
 </html>

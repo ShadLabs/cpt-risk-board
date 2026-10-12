@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CPT Dock Screen</title>
+<meta name="description" content="Wall-screen view of the CPT Risk Board with live countdowns and a celebration for every cleared CPT.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="dock-page">
+  <div class="dock-head">
+    <div class="dock-title">
+      <span class="stripe" aria-hidden="true"></span>
+      <div>
+        <div id="dockFacility" class="dock-facility"></div>
+        <div class="dock-sub"><span id="dockShift"></span> · <span data-i18n="dockHint">This screen updates live from the main board.</span></div>
+      </div>
+    </div>
+    <div class="dock-clock" id="dockClock">--:--:--</div>
+    <div class="dock-controls">
+      <button id="soundBtn" class="primary"></button>
+      <button id="fsBtn" data-i18n="fullscreen">⛶ Full screen</button>
+      <a id="backLink" class="btn" href="index.html" data-i18n="backToBoard">← Back to board</a>
+    </div>
+  </div>
+
+  <div class="dock-strip">
+    <div class="dock-summary" id="dockSummary"></div>
+    <div class="bar big done"><span id="dockProgress" style="width:0%"></span></div>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <script src="js/i18n.js" defer></script>
+  <script src="js/core.js" defer></script>
+  <script src="js/celebrate.js" defer></script>
+  <script src="js/dock.js" defer></script>
+</body>
+</html>
