@@ -23,7 +23,7 @@ I worked for almost two years as a Pack and Outbound Process Assistant. I built 
 - Lists **top actions**, such as how many packers to add and by when, or when to escalate to transportation
 - Shows a **live board** with a countdown, projected finish time and minutes of buffer for every CPT, updated every second
 - Treats packing as a **shared line worked earliest-CPT-first**, so a large early CPT correctly pushes risk onto later ones, and accounts for **truck loading time**
-- Includes a **dock screen** that opens in its own tab for a wall TV. Each CPT tile leads with **units remaining** and a countdown, then switches to a final **CPT cleared** or **CPT missed** result once the CPT time is up.
+- Includes a **dock screen** that opens in its own tab for a wall TV. The **current CPT** fills the top of the screen with units remaining in giant numbers, a countdown, progress, packing deadline, projected finish and buffer. The rest of the shift sits beneath as smaller tiles. Each CPT switches to a final **CPT cleared** or **CPT missed** result once its time is up.
 - **Celebrates every cleared CPT** with confetti, a congratulations message and a fanfare, plus a bigger celebration when the last CPT of the shift is cleared
 - Works in **English and Arabic** with a full right-to-left layout, exports to **CSV**, and saves inputs in the browser
 
@@ -93,4 +93,4 @@ All volumes, rates, and times are **illustrative sample data**. They are not tak
 - Sound alert when a CPT turns red
 
 ---
-Built by **Your Name** · [LinkedIn](https://www.linkedin.com/in/your-profile)
+Built by **Shadrack Kpani Odametey** · [LinkedIn](https://www.linkedin.com/in/Shadrack-Odametey)

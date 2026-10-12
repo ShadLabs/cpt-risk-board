@@ -44,6 +44,51 @@ function tile(x) {
     </div>`;
 }
 
+// The CPT the floor should focus on: the one being packed now; if everything left is packed,
+// the next truck to leave; once the shift is over, the last CPT.
+function pickCurrent(r) {
+  return r.future.find(x => x.remaining > 0) || r.future[0] || r.rows[r.rows.length - 1] || null;
+}
+
+function hero(x, r) {
+  if (!x) return `<p class="dock-empty">${t('noCpts')}</p>`;
+  const cls = STATUS[x.status][0];
+  const p = pct(x.packed, x.total);
+  let headline, side;
+  if (x.past) {
+    headline = x.status === 'cleared'
+      ? `<div class="h-final ok">✓ ${t('stCleared')}</div><div class="h-cap">${t('shipped')(`<b>${fmt(x.total)}</b>`)}</div>`
+      : `<div class="h-final bad">✗ ${t('stMissed')}</div><div class="h-cap">${t('leftBehind')(`<b>${fmt(x.remaining)}</b>`, `<b>${fmt(x.total)}</b>`)}</div>`;
+    side = `<div class="h-side-label">${t('heroDone')}</div>`;
+  } else {
+    headline = x.status === 'packed'
+      ? `<div class="h-final ok">✓ ${t('stPacked')}</div>`
+      : `<div class="h-num">${fmt(x.remaining)}</div><div class="h-cap">${t('unitsRemaining')}</div>`;
+    side = `<div class="h-count">${countdown(x.msLeft)}</div><div class="h-side-label">${t('toCptShort')}</div>`;
+  }
+  const facts = x.past ? '' : `
+    <div class="h-facts">
+      <div><span>${t('heroLoad')}</span><b>${hhmm(x.deadline)}</b></div>
+      ${showsBuffer(x) ? `<div><span>${t('heroFinish')}</span><b>${x.finish ? hhmm(x.finish) : '–'}</b></div>
+      <div><span>${t('heroBuffer')}</span><b class="${bufClass(x)}">${bufText(x)}</b></div>` : ''}
+    </div>`;
+  return `
+    <div class="hero-card ${cls}">
+      <div class="h-top">
+        <div class="h-kicker">${t('currentCpt')}</div>
+        <div class="t-tags">${x.packingNow ? `<span class="now-tag">${t('packingNow')}</span>` : ''}${x.past ? '' : badge(x.status)}</div>
+      </div>
+      <div class="h-name">${x.label}</div>
+      <div class="h-main">
+        <div class="h-left">${headline}</div>
+        <div class="h-right">${side}</div>
+      </div>
+      <div class="h-progress"><div class="bar ${cls}"><span style="width:${p}%"></span></div>
+        <div class="h-pct"><span>${t('heroPacked')(`<b>${fmt(x.packed)}</b>`, `<b>${fmt(x.total)}</b>`)}</span><b>${ltr(p + '%')}</b></div></div>
+      ${facts}
+    </div>`;
+}
+
 function tick() {
   const now = new Date();
   const { fresh, r } = watcher(state, now);
@@ -54,7 +99,11 @@ function tick() {
   $('dockShift').textContent = shiftName(state);
   $('dockSummary').innerHTML = t('dockSummary')(r.clearedN, r.withVol.length, r.risk.length, r.watch.length);
   $('dockProgress').style.width = pct(r.packedUnits, r.totalUnits) + '%';
-  $('tiles').innerHTML = r.rows.map(tile).join('') || `<p class="dock-empty">${t('noCpts')}</p>`;
+  const cur = pickCurrent(r);
+  $('hero').innerHTML = hero(cur, r);
+  const others = r.rows.filter(x => x !== cur);
+  $('othersTitle').hidden = !others.length;
+  $('tiles').innerHTML = others.map(tile).join('');
   try { localStorage.setItem(DOCK_ALIVE_KEY, String(Date.now())); } catch (e) {}
   fresh.forEach((row, i) => {
     const isLast = r.withVol.length > 0 && r.clearedN === r.withVol.length && i === fresh.length - 1;
